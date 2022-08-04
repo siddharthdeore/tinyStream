@@ -13,7 +13,6 @@ void signal_intrupt_handle(int var)
     Server->stop();
     //! blocks at accept(), TODO: convert to non-blocking sockets
     // comment line below visit same server url and port once more time 
-
 }
 
 int main(int argc, char const *argv[])

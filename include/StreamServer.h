@@ -20,6 +20,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h> // non-blocking
 #endif
 
 #include <vector>
@@ -27,10 +28,11 @@
 #include <mutex>  // std::mutex
 #include <atomic> // atomic
 #include <iostream>
+#include <cstring> // strlen
+#include <iomanip> // put_time
+#define MAX_CONNECTIONS 64
 
-#define MAX_CONNECTIONS 32
-
-#include "BaseCamera.h"
+#include "ICamera.h"
 
 #define BLACK "\033[0;30m"
 #define RED "\033[0;31m"
@@ -180,6 +182,11 @@ namespace iit
 
             for (std::vector<int>::iterator it = _client_fds.begin(); it != _client_fds.end(); it++)
             {
+
+                getpeername(*it, (struct sockaddr *)&_client_address, (socklen_t *)sizeof(socklen_t));
+                PRINT_TIMESTAMP;
+                std::cout << YELLOW << " [ closing ] IP: " << inet_ntoa(_client_address.sin_addr)
+                          << " PORT: " << ntohs(_client_address.sin_port) << CLR << std::endl;
                 _close_socket(*it);
             }
             _close_socket(_server_sock_fd);
@@ -194,6 +201,7 @@ namespace iit
         struct sockaddr_in _server_address, _client_address;
 
         std::thread _server_thread, _client_thread;
+
 
         std::atomic<bool> keep_accepting;
         std::mutex _cl_mtx;
@@ -210,7 +218,6 @@ namespace iit
 #endif
         }
     };
-
 }
 
 #endif
