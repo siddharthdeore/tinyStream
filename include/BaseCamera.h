@@ -16,7 +16,7 @@
 class BaseCamera : public ICamera
 {
 public:
-    typedef std::unique_ptr<BaseCamera> Ptr;
+    typedef std::shared_ptr<BaseCamera> Ptr;
 
     BaseCamera(const std::string &device_id, const bool &face_detect = false)
     {

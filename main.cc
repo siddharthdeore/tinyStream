@@ -2,8 +2,8 @@
 #include "BaseCamera.h"
 #include <signal.h>
 
-//#define CAMERA_ID -1
-#define CAMERA_ID "http://10.240.29.68:8080/video"
+#define CAMERA_ID -1
+//#define CAMERA_ID "http://10.240.29.68:8080/video"
 
 std::unique_ptr<iit::StreamServer> Server;
 
@@ -13,7 +13,6 @@ void signal_intrupt_handle(int var)
     Server->stop();
     //! blocks at accept(), TODO: convert to non-blocking sockets
     // comment line below visit same server url and port once more time 
-
 }
 
 int main(int argc, char const *argv[])
