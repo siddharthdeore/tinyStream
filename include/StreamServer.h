@@ -20,6 +20,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h> // non-blocking
 #endif
 
 #include <vector>
@@ -29,7 +30,7 @@
 #include <iostream>
 #include <cstring> // strlen
 #include <iomanip> // put_time
-#define MAX_CONNECTIONS 32
+#define MAX_CONNECTIONS 64
 
 #include "ICamera.h"
 
@@ -77,17 +78,18 @@ namespace iit
 
             keep_accepting = true;
 
-            _server_thread = std::thread(&StreamServer::handle_new_connections, this);
+            //_server_thread = std::thread(&StreamServer::handle_new_connections, this);
             _client_thread = std::thread(&StreamServer::handle_clients, this);
         }
 
         ~StreamServer()
         {
+            std::cout << GREEN << "Server Closed" << CLR << std::endl;
         }
 
         void start()
         {
-            _server_thread.join();
+            //_server_thread.join();
             _client_thread.join();
         }
 
@@ -99,54 +101,85 @@ namespace iit
         {
 
             std::vector<unsigned char> jpg;
+            int master_socket, activity;
+            int max_sd;
+            // set of socket descriptors
+            fd_set readfds;
+            const int socklen = sizeof(struct sockaddr_in);
 
+            struct timeval timeout_val = {0, 1000}; // 0 sec, 1 milisec
+            //////////////////
             while (keep_accepting)
             {
+                // clear the socket set
+                FD_ZERO(&readfds);
+
+                // add master socket to set
+                FD_SET(_server_sock_fd, &readfds);
+
+                max_sd = _server_sock_fd;
+
+                // update max socket fd
+                for (int current_client_fd : _client_fds)
+                {
+                    // if valid socket descriptor then add to read list
+                    if (current_client_fd > 0)
+                        FD_SET(current_client_fd, &readfds);
+
+                    // highest file descriptor number, need it for the select function
+                    if (current_client_fd > max_sd)
+                        max_sd = current_client_fd;
+                }
+
+                activity = select(max_sd + 1, &readfds, NULL, NULL, &timeout_val);
+                // handle new connection on activity
+                if (FD_ISSET(_server_sock_fd, &readfds))
+                {
+                    handle_new_connections();
+                }
+
+                std::string frame_header;
+
                 // grab jpeg image from camera
                 jpg = _camera->get_frame();
 
                 // update jpg size in header for individual frame
-                std::string head = "--frame\r\nContent-Type: image/jpeg\r\n"
-                                   "Content-Length: " +
-                                   std::to_string(jpg.size()) + "\r\n\r\n";
-
-                char *frame_header = (char *)head.c_str();
+                frame_header = "--frame\r\nContent-Type: image/jpeg\r\n"
+                               "Content-Length: " +
+                               std::to_string(jpg.size()) + "\r\n\r\n";
 
                 // send to all active clients
-                for (std::vector<int>::iterator it = _client_fds.begin(); it != _client_fds.end();)
+                for (std::vector<int>::iterator it = _client_fds.begin(); it != _client_fds.end(); it++)
                 {
-                    current_client_fd = *it;
-
-                    // send frame header
-                    int ret = send(current_client_fd, frame_header, strlen(frame_header), 0x4000);
-                    // send frame
-                    ret = send(current_client_fd, jpg.data(), jpg.size(), 0x4000);
-                    // on rerror remove client
-                    if (ret < 0)
+                    int current_client_fd = *it;
+                    char buffer[1024];
+                    // check if current client is closing and read message
+                    if (FD_ISSET(current_client_fd, &readfds))
                     {
-                        const int socklen = sizeof(struct sockaddr_in);
+                        if ((activity = read(current_client_fd, buffer, 1024)) == 0)
+                        {
+                            getpeername(current_client_fd, (struct sockaddr *)&_client_address, (socklen_t *)&socklen);
 
-                        getpeername(current_client_fd, (struct sockaddr *)&_client_address, (socklen_t *)&socklen);
+                            // remove cleint fd from list
+                            _client_fds.erase(it--);
 
-                        _cl_mtx.lock();
-                        it = _client_fds.erase(it);
-                        _cl_mtx.unlock();
+                            PRINT_TIMESTAMP;
+                            std::cout << RED << " [ - ] IP: " << inet_ntoa(_client_address.sin_addr)
+                                      << " PORT: " << ntohs(_client_address.sin_port)
+                                      << ", Total clients " << _client_fds.size() << CLR << std::endl;
 
-                        PRINT_TIMESTAMP;
-                        std::cout << RED << " [ - ] IP: " << inet_ntoa(_client_address.sin_addr)
-                                  << " PORT: " << ntohs(_client_address.sin_port)
-                                  << ", Total clients " << _client_fds.size() << CLR << std::endl;
-
-                        _close_socket(current_client_fd);
+                            _close_socket(current_client_fd);
+                        }
                     }
-
                     else
                     {
-                        ++it;
+                        // send frame header
+                        send(current_client_fd, (char *)frame_header.data(), frame_header.size(), 0x4000);
+                        // send frame
+                        send(current_client_fd, jpg.data(), jpg.size(), 0x4000);
                     }
                 }
-
-                usleep(20000);
+                usleep(20000); // 50 Hz loop
             }
         }
         void handle_new_connections()
@@ -157,21 +190,18 @@ namespace iit
                                        "Connection: close\r\n"
                                        "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n";
 
-            const int header_size = header.size();
-            char *header_data = (char *)header.data();
-
             const int socklen = sizeof(struct sockaddr_in);
 
             int new_connection_fd;
 
-            while (keep_accepting && (new_connection_fd = accept(_server_sock_fd, (struct sockaddr *)&_client_address, (socklen_t *)&socklen)))
+            if (keep_accepting && (new_connection_fd = accept(_server_sock_fd, (struct sockaddr *)&_client_address, (socklen_t *)&socklen)))
             {
                 // read from client
                 char msg[512] = "\0";
                 int readBytes = recv(new_connection_fd, msg, 512, MSG_PEEK);
 
                 // send primary header response
-                send(new_connection_fd, header_data, header_size, 0x4000);
+                send(new_connection_fd, header.data(), header.size(), 0x4000);
 
                 // add new connection to client list
                 _cl_mtx.lock();
@@ -185,12 +215,12 @@ namespace iit
                           << ", Total clients " << _client_fds.size() << CLR << std::endl;
 
                 // 10Hz
-                usleep(100000);
+                // usleep(1000);
             }
         }
         void stop()
         {
-            std::cout << YELLOW << "\nServer Closing " << CLR << std::endl;
+            std::cout << YELLOW << "\nClosing connections " << CLR << std::endl;
 
             _cl_mtx.lock();
             keep_accepting = false;
@@ -198,22 +228,25 @@ namespace iit
 
             for (std::vector<int>::iterator it = _client_fds.begin(); it != _client_fds.end(); it++)
             {
+                getpeername(*it, (struct sockaddr *)&_client_address, (socklen_t *)sizeof(socklen_t));
+                PRINT_TIMESTAMP;
+                std::cout << YELLOW << " [ closing ] IP: " << inet_ntoa(_client_address.sin_addr)
+                          << " PORT: " << ntohs(_client_address.sin_port) << CLR << std::endl;
                 _close_socket(*it);
             }
             _close_socket(_server_sock_fd);
-
-            std::terminate();
         }
 
     private:
         // socket descriptors
-        int _server_sock_fd, current_client_fd;
+        int _server_sock_fd;
         std::vector<int> _client_fds;
 
         // internet socket address
         struct sockaddr_in _server_address, _client_address;
 
-        std::thread _server_thread, _client_thread;
+        // std::thread _server_thread, _client_thread;
+        std::thread _client_thread;
 
         std::atomic<bool> keep_accepting;
         std::mutex _cl_mtx;
