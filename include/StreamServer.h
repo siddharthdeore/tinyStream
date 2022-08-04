@@ -47,6 +47,13 @@
 #define PRINT_TIMESTAMP std::cout << std::put_time(std::localtime(&time_now), "%Y-%m-%d %OH:%OM:%OS")
 static std::time_t time_now = std::time(nullptr);
 
+static void set_nonblock(int socket)
+{
+    int flags;
+    flags = fcntl(socket, F_GETFL, 0);
+    fcntl(socket, F_SETFL, flags | O_NONBLOCK);
+}
+
 namespace iit
 {
     class StreamServer
@@ -72,11 +79,13 @@ namespace iit
 
             // start listneing client requests
             listen(_server_sock_fd, MAX_CONNECTIONS);
+            set_nonblock(_server_sock_fd);
 
             std::cout << YELLOW << "\nServer started at http://localhost:" << port << "\n"
                       << CLR << std::endl;
-
+            _flg_mtx.lock();
             keep_accepting = true;
+            _flg_mtx.unlock();
 
             //_server_thread = std::thread(&StreamServer::handle_new_connections, this);
             _client_thread = std::thread(&StreamServer::handle_clients, this);
@@ -107,13 +116,12 @@ namespace iit
             fd_set readfds;
             const int socklen = sizeof(struct sockaddr_in);
 
-            struct timeval timeout_val = {0, 1000}; // 0 sec, 1 milisec
+            struct timeval timeout_val = {0, 10000}; // 0 sec, 1 milisec
             //////////////////
             while (keep_accepting)
             {
                 // clear the socket set
                 FD_ZERO(&readfds);
-
                 // add master socket to set
                 FD_SET(_server_sock_fd, &readfds);
 
@@ -124,17 +132,19 @@ namespace iit
                 {
                     // if valid socket descriptor then add to read list
                     if (current_client_fd > 0)
+                    {
                         FD_SET(current_client_fd, &readfds);
-
+                    }
                     // highest file descriptor number, need it for the select function
                     if (current_client_fd > max_sd)
                         max_sd = current_client_fd;
                 }
 
-                activity = select(max_sd + 1, &readfds, NULL, NULL, &timeout_val);
+                activity = select(max_sd + 1, &readfds, NULL, (fd_set *)0, &timeout_val);
                 // handle new connection on activity
                 if (FD_ISSET(_server_sock_fd, &readfds))
                 {
+                    FD_CLR(_server_sock_fd, &readfds);
                     handle_new_connections();
                 }
 
@@ -149,34 +159,35 @@ namespace iit
                                std::to_string(jpg.size()) + "\r\n\r\n";
 
                 // send to all active clients
-                for (std::vector<int>::iterator it = _client_fds.begin(); it != _client_fds.end(); it++)
+                for (std::vector<int>::iterator it = _client_fds.begin(); it != _client_fds.end(); ++it)
                 {
                     int current_client_fd = *it;
                     char buffer[1024];
                     // check if current client is closing and read message
-                    if (FD_ISSET(current_client_fd, &readfds))
+                    /*
+                    if (FD_ISSET(current_client_fd, &writefds))
                     {
-                        if ((activity = read(current_client_fd, buffer, 1024)) == 0)
+                        FD_CLR(current_client_fd,&writefds);
+                        if ((activity = recv(current_client_fd, buffer, 1024,MSG_PEEK)) == 0)
                         {
-                            getpeername(current_client_fd, (struct sockaddr *)&_client_address, (socklen_t *)&socklen);
-
-                            // remove cleint fd from list
-                            _client_fds.erase(it--);
-
-                            PRINT_TIMESTAMP;
-                            std::cout << RED << " [ - ] IP: " << inet_ntoa(_client_address.sin_addr)
-                                      << " PORT: " << ntohs(_client_address.sin_port)
-                                      << ", Total clients " << _client_fds.size() << CLR << std::endl;
-
-                            _close_socket(current_client_fd);
                         }
                     }
-                    else
+                    */
+                    // send frame header
+                    int ret = send(current_client_fd, (char *)frame_header.data(), frame_header.size(), 0x4000);
+                    ret = send(current_client_fd, jpg.data(), jpg.size(), 0x4000);
+                    // send frame
+                    if (ret < 0)
                     {
-                        // send frame header
-                        send(current_client_fd, (char *)frame_header.data(), frame_header.size(), 0x4000);
-                        // send frame
-                        send(current_client_fd, jpg.data(), jpg.size(), 0x4000);
+                        getpeername(current_client_fd, (struct sockaddr *)&_client_address, (socklen_t *)&socklen);
+
+                        // remove cleint fd from list
+                        _client_fds.erase(it--);
+
+                        PRINT_TIMESTAMP;
+                        std::cout << RED << " [ - ] IP: " << inet_ntoa(_client_address.sin_addr)
+                                  << " PORT: " << ntohs(_client_address.sin_port)
+                                  << ", Total clients " << _client_fds.size() << CLR << std::endl;
                     }
                 }
                 usleep(20000); // 50 Hz loop
@@ -196,9 +207,11 @@ namespace iit
 
             if (keep_accepting && (new_connection_fd = accept(_server_sock_fd, (struct sockaddr *)&_client_address, (socklen_t *)&socklen)))
             {
+                set_nonblock(new_connection_fd);
+
                 // read from client
-                char msg[512] = "\0";
-                int readBytes = recv(new_connection_fd, msg, 512, MSG_PEEK);
+                // char msg[512] = "\0";
+                // int readBytes = recv(new_connection_fd, msg, 512, MSG_PEEK);
 
                 // send primary header response
                 send(new_connection_fd, header.data(), header.size(), 0x4000);
@@ -213,7 +226,6 @@ namespace iit
                 std::cout << GREEN << " [ + ] IP: " << inet_ntoa(_client_address.sin_addr)
                           << " PORT: " << ntohs(_client_address.sin_port)
                           << ", Total clients " << _client_fds.size() << CLR << std::endl;
-
                 // 10Hz
                 // usleep(1000);
             }
@@ -222,10 +234,11 @@ namespace iit
         {
             std::cout << YELLOW << "\nClosing connections " << CLR << std::endl;
 
-            _cl_mtx.lock();
+            _flg_mtx.lock();
             keep_accepting = false;
-            _cl_mtx.unlock();
+            _flg_mtx.unlock();
 
+            _cl_mtx.lock();
             for (std::vector<int>::iterator it = _client_fds.begin(); it != _client_fds.end(); it++)
             {
                 getpeername(*it, (struct sockaddr *)&_client_address, (socklen_t *)sizeof(socklen_t));
@@ -234,7 +247,7 @@ namespace iit
                           << " PORT: " << ntohs(_client_address.sin_port) << CLR << std::endl;
                 _close_socket(*it);
             }
-            _close_socket(_server_sock_fd);
+            _cl_mtx.unlock();
         }
 
     private:
@@ -249,7 +262,7 @@ namespace iit
         std::thread _client_thread;
 
         std::atomic<bool> keep_accepting;
-        std::mutex _cl_mtx;
+        std::mutex _cl_mtx, _flg_mtx;
 
         // Camera pointer
         ICamera::Ptr _camera;
