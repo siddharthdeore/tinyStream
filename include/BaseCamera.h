@@ -21,15 +21,26 @@ public:
     BaseCamera(const std::string &device_id, const bool &face_detect = false)
     {
         _face_detect = face_detect;
-        _cap.open(device_id, cv::CAP_ANY);
-        _cascade.load("../assets/haarcascade_frontalface_default.xml");
+        _cam_available = _cap.open(device_id, cv::CAP_ANY);
+        init();
     }
-
     BaseCamera(const int &device_id, const bool &face_detect = false)
     {
         _face_detect = face_detect;
-        _cap.open(device_id, cv::CAP_ANY);
+        _cam_available = _cap.open(device_id, cv::CAP_ANY);
+        init();
+    }
+    void init()
+    {
         _cascade.load("../assets/haarcascade_frontalface_default.xml");
+        _no_camera = cv::Mat(480, 640, CV_8UC3, cv::Scalar(0, 0, 0));
+        cv::putText(_no_camera, // target image
+                    "NO VIDEO", // text
+                    cv::Point(_no_camera.cols / 3.5, _no_camera.rows / 1.8),
+                    cv::FONT_HERSHEY_DUPLEX,
+                    2,
+                    CV_RGB(255, 255, 255), // font color
+                    2);
     }
 
     ~BaseCamera()
@@ -39,19 +50,26 @@ public:
 
     virtual std::vector<uchar> get_frame()
     {
-        // capture frame
-        _frame_mtx.lock();
-        _cap.read(_frame);
-        _frame_mtx.unlock();
+        try
+        {
+            // capture frame
+            _frame_mtx.lock();
+            _cap.read(_frame);
+            _frame_mtx.unlock();
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << e.what() << '\n';
+        }
 
         // if face detection enabled
-        if (_face_detect)
+        if (_face_detect && _cam_available)
         {
 
             cv::cvtColor(_frame, _gray, cv::COLOR_BGRA2GRAY);
             cv::resize(_gray, _scaled_gray, cv::Size(), 0.2, 0.2, cv::INTER_LINEAR);
             cv::equalizeHist(_scaled_gray, _scaled_gray);
-            
+
             std::vector<cv::Rect> faces;
             _cascade.detectMultiScale(_scaled_gray, faces, 1.5, 1, 0 | cv::CASCADE_SCALE_IMAGE, cv::Size(30, 30));
 
@@ -77,7 +95,12 @@ public:
         }
 
         // encode grabed frame to jpg
-        cv::imencode(".jpg", _frame, jpg, params);
+        if (_cam_available)
+            cv::imencode(".jpg", _frame, jpg, params);
+        else
+        {
+            cv::imencode(".jpg", _no_camera, jpg, params);
+        }
 
         return jpg;
     }
@@ -86,13 +109,14 @@ private:
     cv::VideoCapture _cap;
     cv::Mat _frame;
     cv::Mat _gray, _scaled_gray, _inset_roi;
-    
+    cv::Mat _no_camera;
+
     std::vector<uchar> jpg;
     std::vector<int> params{cv::IMWRITE_JPEG_QUALITY, 90};
 
     cv::CascadeClassifier _cascade;
     cv::Rect fRect;
-    bool _face_detect;
+    bool _face_detect, _cam_available;
     const double alfa = 0.87;
 
     std::mutex _frame_mtx;
