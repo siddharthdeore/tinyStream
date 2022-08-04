@@ -91,7 +91,7 @@ namespace iit
         void handle_clients()
         {
 
-            std::vector<uchar> jpg;
+            std::vector<unsigned char> jpg;
 
             while (keep_accepting)
             {
