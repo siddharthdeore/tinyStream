@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 
 project(tinyStream LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CONFIGURATION_TYPES "Release" CACHE STRING "" FORCE)
 
 find_package( OpenCV REQUIRED )
 include_directories( ${OpenCV_INCLUDE_DIRS} include)
