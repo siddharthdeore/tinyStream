@@ -153,8 +153,9 @@ namespace iit
                         // verbose output
                         PRINT_TIMESTAMP;
                         std::cout << GREEN << " [ + ] IP: " << inet_ntoa(_client_address.sin_addr)
-                                  << " PORT: " << ntohs(_client_address.sin_port)
-                                  << ", Total clients " << _client_fds.size() << CLR << std::endl;
+                                  << ":" << ntohs(_client_address.sin_port)
+                                  << ", " << _client_fds.size()
+                                  << " clients on port:" << ntohs(_server_address.sin_port) << CLR << std::endl;
                     }
                 }
 
@@ -190,8 +191,9 @@ namespace iit
 
                             PRINT_TIMESTAMP;
                             std::cout << RED << " [ - ] IP: " << inet_ntoa(_client_address.sin_addr)
-                                      << " PORT: " << ntohs(_client_address.sin_port)
-                                      << ", Total clients " << _client_fds.size() << CLR << std::endl;
+                                      << ":" << ntohs(_client_address.sin_port)
+                                      << ", " << _client_fds.size()
+                                      << " clients on port:" << ntohs(_server_address.sin_port) << CLR << std::endl;
                         }
                     }
                 }
@@ -211,7 +213,7 @@ namespace iit
         }
         void stop()
         {
-            std::cout << YELLOW << "\n Server Closing " << CLR << std::endl;
+            std::cout << YELLOW << "\n Server Closing : " << ntohs(_server_address.sin_port) << CLR << std::endl;
             _flg_mtx.lock();
             keep_accepting = false;
             _flg_mtx.unlock();
