@@ -22,16 +22,12 @@ public:
     {
         _face_detect = face_detect;
         _cam_available = _cap.open(device_id, cv::CAP_ANY);
-        _cap.set(cv::CAP_PROP_FRAME_WIDTH,640);
-        _cap.set(cv::CAP_PROP_FRAME_HEIGHT,480);
         init();
     }
     BaseCamera(const int &device_id, const bool &face_detect = false)
     {
         _face_detect = face_detect;
         _cam_available = _cap.open(device_id, cv::CAP_ANY);
-        _cap.set(cv::CAP_PROP_FRAME_WIDTH,640);
-        _cap.set(cv::CAP_PROP_FRAME_HEIGHT,480);
         init();
     }
     void init()
@@ -116,7 +112,7 @@ private:
     cv::Mat _no_camera;
 
     std::vector<uchar> jpg;
-    std::vector<int> params{cv::IMWRITE_JPEG_QUALITY, 50};
+    std::vector<int> params{cv::IMWRITE_JPEG_QUALITY, 90};
 
     cv::CascadeClassifier _cascade;
     cv::Rect fRect;
