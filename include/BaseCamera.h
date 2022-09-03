@@ -18,13 +18,22 @@ class BaseCamera : public ICamera
 public:
     typedef std::shared_ptr<BaseCamera> Ptr;
 
-    BaseCamera(const std::string &device_id, const bool &face_detect = false)
+    BaseCamera(const std::string &device_id,
+               const int &witdh = 640,
+               const int &height = 480,
+               const bool &face_detect = false)
     {
         _face_detect = face_detect;
+        _width = witdh;
+        _height = height;
         _cam_available = _cap.open(device_id, cv::CAP_ANY);
+
         init();
     }
-    BaseCamera(const int &device_id, const bool &face_detect = false)
+    BaseCamera(const int &device_id,
+               const int &witdh = 640,
+               const int &height = 480,
+               const bool &face_detect = false)
     {
         _face_detect = face_detect;
         _cam_available = _cap.open(device_id, cv::CAP_ANY);
@@ -32,6 +41,8 @@ public:
     }
     void init()
     {
+        _cap.set(cv::CAP_PROP_FRAME_WIDTH, _width);
+        _cap.set(cv::CAP_PROP_FRAME_HEIGHT, _height);
         _cascade.load("../assets/haarcascade_frontalface_default.xml");
         _no_camera = cv::Mat(480, 640, CV_8UC3, cv::Scalar(0, 0, 0));
         cv::putText(_no_camera, // target image
@@ -110,15 +121,16 @@ private:
     cv::Mat _frame;
     cv::Mat _gray, _scaled_gray, _inset_roi;
     cv::Mat _no_camera;
+    int _width = 640;
+    int _height = 480;
 
     std::vector<uchar> jpg;
-    std::vector<int> params{cv::IMWRITE_JPEG_QUALITY, 90};
+    std::vector<int> params{cv::IMWRITE_JPEG_QUALITY, 45};
 
     cv::CascadeClassifier _cascade;
     cv::Rect fRect;
     bool _face_detect, _cam_available;
     const double alfa = 0.87;
-
     std::mutex _frame_mtx;
 };
 #endif

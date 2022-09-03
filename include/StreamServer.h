@@ -197,7 +197,7 @@ namespace iit
                         }
                     }
                 }
-                usleep(20000); // 50 Hz loop
+                usleep(40000); // 25 Hz loop
             }
 
             // close all sockets
