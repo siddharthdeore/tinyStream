@@ -29,14 +29,14 @@ int main(int argc, char const *argv[])
     // if no args are passed, use default usb camera
     if (argc < 2)
     {
-        camera_list.push_back(std::make_shared<BaseCamera>(DEFAULT_CAMERA, false));
+        camera_list.push_back(std::make_shared<BaseCamera>(DEFAULT_CAMERA, 640,480, false));
     }
     else
     {
         // add camera for each index passed in command line argument
         for (int i = 1; i < argc; i++)
         {
-            camera_list.push_back(std::make_shared<BaseCamera>(atoi(argv[i]), false));
+            camera_list.push_back(std::make_shared<BaseCamera>(atoi(argv[i]),640,480, false));
         }
     }
 

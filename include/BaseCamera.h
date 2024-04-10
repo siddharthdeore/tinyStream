@@ -36,6 +36,8 @@ public:
                const bool &face_detect = false)
     {
         _face_detect = face_detect;
+        _width = witdh;
+        _height = height;
         _cam_available = _cap.open(device_id, cv::CAP_ANY);
         init();
     }
@@ -125,8 +127,16 @@ private:
     int _height = 480;
 
     std::vector<unsigned char> jpg;
-    std::vector<int> params{cv::IMWRITE_JPEG_QUALITY, 45};
+    // opencv jpeg encode params
+    std::vector<int> params{
+        cv::IMWRITE_JPEG_QUALITY, 50,
+        cv::IMWRITE_JPEG_PROGRESSIVE, 1,
+        cv::IMWRITE_JPEG_OPTIMIZE, 1,
+        cv::IMWRITE_JPEG_LUMA_QUALITY, 50,
+        cv::IMWRITE_JPEG_CHROMA_QUALITY, 50,
+        cv::IMWRITE_JPEG_RST_INTERVAL, 0};
 
+    //opencv face detection
     cv::CascadeClassifier _cascade;
     cv::Rect fRect;
     bool _face_detect, _cam_available;
