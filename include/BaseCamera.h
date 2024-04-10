@@ -41,9 +41,10 @@ public:
     }
     void init()
     {
+        if (_face_detect)
+            _cascade.load("../assets/haarcascade_frontalface_default.xml");
         _cap.set(cv::CAP_PROP_FRAME_WIDTH, _width);
         _cap.set(cv::CAP_PROP_FRAME_HEIGHT, _height);
-        _cascade.load("../assets/haarcascade_frontalface_default.xml");
         _no_camera = cv::Mat(480, 640, CV_8UC3, cv::Scalar(0, 0, 0));
         cv::putText(_no_camera, // target image
                     "NO VIDEO", // text
@@ -59,14 +60,13 @@ public:
         _cap.release();
     }
 
-    virtual std::vector<uchar> get_frame()
+    virtual std::vector<unsigned char> &get_frame()
     {
         try
         {
             // capture frame
-            _frame_mtx.lock();
+            std::lock_guard<std::mutex> lock(_frame_mtx);
             _cap.read(_frame);
-            _frame_mtx.unlock();
         }
         catch (const std::exception &e)
         {
@@ -124,7 +124,7 @@ private:
     int _width = 640;
     int _height = 480;
 
-    std::vector<uchar> jpg;
+    std::vector<unsigned char> jpg;
     std::vector<int> params{cv::IMWRITE_JPEG_QUALITY, 45};
 
     cv::CascadeClassifier _cascade;

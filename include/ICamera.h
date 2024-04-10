@@ -7,13 +7,13 @@
 
 /**
  * @brief Camera interface class, any derived class must implement get_frame()
- * 
+ *
  */
 class ICamera
 {
 public:
     typedef std::shared_ptr<ICamera> Ptr;
-    virtual std::vector<unsigned char> get_frame() = 0;
+    virtual std::vector<unsigned char> &get_frame() = 0;
 
 private:
 };

@@ -25,6 +25,7 @@
 
 #include <vector>
 #include <thread> // std::thread
+#include <chrono> // std::chrono
 #include <mutex>  // std::mutex
 #include <atomic> // atomic
 #include <iostream>
@@ -113,6 +114,7 @@ namespace iit
             const int socklen = sizeof(struct sockaddr_in);
 
             struct timeval timeout_val = {0, 10000}; // 0 sec, 1 milisec
+            auto wake_time = std::chrono::steady_clock::now();
             //////////////////
             while (keep_accepting)
             {
@@ -197,7 +199,8 @@ namespace iit
                         }
                     }
                 }
-                usleep(40000); // 25 Hz loop
+                wake_time += std::chrono::milliseconds(10); // 100 Hz
+                std::this_thread::sleep_until(wake_time);
             }
 
             // close all sockets
